@@ -4,18 +4,19 @@ A TypeScript/Bun Discord bot for remotely controlling your local machine — run
 
 ## Features
 
-- **Claude Code control** — start sessions, send messages, stream responses in real-time
-- **Shell execution** — run commands with live tmux-backed streaming output
+- **Claude Code control** — start sessions, send messages, stream responses in real-time via tmux
+- **Shell execution** — run commands with live streaming output (tmux-backed)
 - **File management** — read, write, list, and delete files within a configurable work directory
-- **System monitoring** — CPU, memory, disk, and process snapshots
-- **Security** — single-owner access control, dangerous-command confirmation dialogs, path traversal protection
+- **System monitoring** — CPU, memory, disk, and process snapshots (macOS)
+- **Three-tier permission model** — read ops run immediately; write ops require a blue confirmation button; destructive ops require a red warning confirmation
 - **Session persistence** — tmux sessions survive bot restarts; automatic reconciliation on startup
+- **Single-owner access control** — all interactions gated by a configured Discord User ID
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Bun |
+| Runtime | [Bun](https://bun.sh) |
 | Discord | discord.js v14 |
 | Database | bun:sqlite + Drizzle ORM |
 | Validation | Zod |
@@ -26,15 +27,15 @@ A TypeScript/Bun Discord bot for remotely controlling your local machine — run
 
 ### 1. Prerequisites
 
-- [Bun](https://bun.sh) v1.0+
-- tmux installed (`brew install tmux`)
-- Claude Code CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code`)
-- A Discord bot token (create at [discord.com/developers](https://discord.com/developers/applications))
+- [Bun](https://bun.sh) — `curl -fsSL https://bun.sh/install | bash`
+- tmux — `brew install tmux`
+- Claude Code CLI — `npm install -g @anthropic-ai/claude-code` (authenticated)
+- A Discord bot with **Message Content Intent** enabled ([discord.com/developers](https://discord.com/developers/applications))
 
 ### 2. Install
 
 ```bash
-git clone <repo>
+git clone https://github.com/trnet4334/discord-claude-bot.git
 cd discord-claude-bot
 bun install
 ```
@@ -45,21 +46,19 @@ bun install
 cp .env.example .env
 ```
 
-Edit `.env`:
+Edit `.env` with your values:
 
-```env
-DISCORD_TOKEN=your_bot_token
-DISCORD_APPLICATION_ID=your_app_id
-DISCORD_GUILD_ID=your_server_id
-ALLOWED_USER_ID=your_discord_user_id   # Only this user can control the bot
-
-CLAUDE_WORK_DIR=/Users/yourname        # Directory for file operations and Claude
-TMUX_PREFIX=discord-bot                # Prefix for all tmux session names
-```
+| Variable | Where to find it |
+|----------|-----------------|
+| `DISCORD_TOKEN` | Developer Portal → Your App → Bot → Token |
+| `DISCORD_APPLICATION_ID` | Developer Portal → General Information → Application ID |
+| `DISCORD_GUILD_ID` | Discord → Right-click your server → Copy Server ID (requires Developer Mode) |
+| `ALLOWED_USER_ID` | Discord → Right-click your username → Copy User ID |
+| `CLAUDE_WORK_DIR` | Absolute path to your working directory (defaults to `$HOME`) |
 
 ### 4. Deploy Slash Commands
 
-Run once after setting up (or after adding new commands):
+Run once to register commands with your guild:
 
 ```bash
 bun run deploy
@@ -68,72 +67,109 @@ bun run deploy
 ### 5. Start
 
 ```bash
+# Production
 bun run start
-# or for development with auto-reload:
+
+# Development (auto-restart on file changes)
 bun run dev
 ```
 
+A successful startup looks like:
+```json
+{"message":"Discord client ready","meta":{"username":"YourBot#1234"}}
+{"message":"Module loaded","meta":{"name":"shell"}}
+{"message":"Module loaded","meta":{"name":"claude"}}
+{"message":"Module loaded","meta":{"name":"files"}}
+{"message":"Module loaded","meta":{"name":"system"}}
+{"message":"Slash commands deployed successfully"}
+```
+
+---
+
 ## Commands
 
-### `/claude`
+### `/claude` — Claude Code Sessions
 
 | Subcommand | Description |
 |-----------|-------------|
-| `/claude start` | Start a new Claude Code session |
-| `/claude send <message>` | Send a message to the active Claude session |
-| `/claude stop` | Stop the active Claude session |
-| `/claude status` | Show all Claude session statuses |
-| `/claude attach` | Get the tmux attach command for a session |
+| `/claude start` | Start a new Claude Code tmux session |
+| `/claude send <message>` | Send a message to the most-recently-active session |
+| `/claude stop [id]` | Stop a Claude session |
+| `/claude status` | List all sessions with status and last-activity time |
+| `/claude attach [id]` | Get the `tmux attach` command to join locally |
 
-### `/shell`
+### `/shell` — Shell Execution
 
 | Subcommand | Description |
 |-----------|-------------|
-| `/shell run <command>` | Execute a shell command with streaming output |
-| `/shell run <command> persist:true` | Keep tmux session alive after completion |
+| `/shell run <command>` | Execute a command (write confirmation required) |
+| `/shell run <command> persist:true` | Run in a persistent tmux session with streaming |
 | `/shell history [limit]` | Show recent command history |
 | `/shell sessions` | List active shell tmux sessions |
 
-### `/file`
+### `/file` — File Management
+
+All paths are relative to `CLAUDE_WORK_DIR`. Path traversal attempts are blocked.
 
 | Subcommand | Description |
 |-----------|-------------|
-| `/file read <path>` | Read a file (uploads as attachment if large) |
-| `/file write <path> <content>` | Write content to a file |
-| `/file list [path]` | List files in a directory |
-| `/file delete <path>` | Delete a file (requires confirmation) |
+| `/file read <path>` | Read a file; large files are uploaded as attachments |
+| `/file write <path> <content>` | Write to a file (write confirmation + preview required) |
+| `/file list [path]` | List directory contents |
+| `/file delete <path>` | Delete a file (destructive confirmation required) |
 
-File paths are relative to `CLAUDE_WORK_DIR`. Path traversal attempts are blocked.
-
-### `/system`
+### `/system` — System Info (macOS)
 
 | Subcommand | Description |
 |-----------|-------------|
-| `/system status` | System overview (uptime, CPU count, vm_stat) |
-| `/system ps [count]` | Top processes by CPU usage |
+| `/system status` | Uptime, CPU count, memory (vm_stat) |
+| `/system ps [count]` | Top processes by CPU |
 | `/system df` | Disk usage |
 | `/system top` | CPU and memory snapshot |
+
+---
+
+## Permission Model
+
+Every operation falls into one of three tiers:
+
+| Tier | Operations | Dialog |
+|------|-----------|--------|
+| **Read** | `system *`, `file read`, `file list`, `shell history`, `claude status` | None — executes immediately |
+| **Write** | `shell run` (safe commands), `file write` | 📝 Blue **Proceed** button |
+| **Destructive** | `shell run` (dangerous patterns), `file delete` | ⚠️ Red **Confirm** button |
+
+Dangerous shell patterns (rm -rf, dd, mkfs, drop database, etc.) are detected by regex and automatically escalated to the destructive tier regardless of intent.
+
+---
 
 ## Architecture
 
 ```
-Discord ──► AuthGuard ──► Router ──► Module Handler
-                                         │
-                          ┌──────────────┤
-                          │              │
-                    tmux Session     DB (SQLite)
-                          │
-                    TmuxPoller (1500ms)
-                          │
-                    DiscordStreamer
-                    (debounced edits, rate-limit aware)
-                          │
-                    Discord Message (live updates)
+Discord ──► AuthGuard (User ID check)
+               │
+               ▼
+           BotRouter ──► SlashCommandHandler / ChatHandler
+                               │
+               ┌───────────────┤
+               │               │
+         ConfirmationGuard   DB (SQLite / Drizzle)
+         (write / dangerous)   │
+               │           SessionRepo / CommandRepo
+               ▼
+          TmuxAdapter
+          SessionManager ──► reconcile on startup
+               │
+          TmuxPoller (1500ms capture-pane)
+               │
+          DiscordStreamer (debounced edits, rate-limit aware)
+               │
+          Discord Message (live updates)
 ```
 
 ### Module System
 
-All features are implemented as `BotModule` instances:
+All features are `BotModule` instances wired in `src/main.ts`. To add a module:
 
 ```typescript
 interface BotModule {
@@ -145,53 +181,75 @@ interface BotModule {
 }
 ```
 
-To add a new module: implement the interface and add it to the `modules` array in `src/main.ts`.
-
-### Security Model
-
-1. **Auth guard** — all interactions require `ALLOWED_USER_ID` match
-2. **Dangerous command detection** — shell commands matched against `DANGEROUS_PATTERNS` regex list; requires Discord button confirmation
-3. **Path traversal protection** — file paths resolved and checked against `CLAUDE_WORK_DIR`
-4. **tmux session isolation** — Claude/Shell/Monitor each use separate sessions
-5. **Env validation** — Zod schema rejects startup if any required variable is missing
+Implement the interface, instantiate in `main.ts`, add to the `modules` array — done.
 
 ### tmux Session Names
 
 ```
 {TMUX_PREFIX}-claude-{nanoid6}   # Long-running Claude Code sessions
-{TMUX_PREFIX}-shell-{nanoid6}    # Short shell commands (or persistent)
+{TMUX_PREFIX}-shell-{nanoid6}    # Shell commands (transient or persistent)
 {TMUX_PREFIX}-monitor            # System monitoring (singleton)
 ```
+
+### Streaming Pipeline
+
+```
+tmux pane output
+  └─► capture-pane every 1500ms
+      └─► diff new lines
+          └─► stripAnsi → truncate to 1800 chars
+              └─► debounce 500ms
+                  └─► discord.message.edit() (max 4/sec)
+```
+
+---
 
 ## Development
 
 ```bash
-# Run tests
-bun test
-
-# Type check
-bun run typecheck
-
-# Watch mode
-bun run dev
+bun test          # Run unit tests (27 tests)
+bun run typecheck # tsc --noEmit strict check
+bun run dev       # Watch mode
 ```
 
 ## Project Structure
 
 ```
 src/
-├── main.ts                    # Entry point
-├── config/                    # Env validation, constants
-├── bot/                       # Discord client, registry, router, deployer
-├── guards/                    # Auth + confirmation guards
-├── tmux/                      # Adapter interface + implementation, session manager, poller
-├── streaming/                 # Output formatter, Discord streamer, stream manager
+├── main.ts                      # Entry point — wires all layers, handles shutdown
+├── config/
+│   ├── env.ts                   # Zod-validated env schema
+│   └── constants.ts             # Discord limits, tmux names, dangerous patterns
+├── bot/
+│   ├── client.ts                # discord.js Client factory
+│   ├── registry.ts              # Module/command registration
+│   ├── deployer.ts              # Guild slash command deployment
+│   └── router.ts                # Interaction + message routing
+├── guards/
+│   ├── auth.guard.ts            # Single-owner User ID enforcement
+│   └── confirmation.guard.ts   # Write / dangerous confirmation dialogs
+├── tmux/
+│   ├── adapter.ts               # TmuxAdapter interface
+│   ├── tmux.adapter.ts          # Concrete implementation
+│   ├── session.manager.ts       # Session lifecycle + DB reconciliation
+│   └── poller.ts                # capture-pane polling + diff
+├── streaming/
+│   ├── output.formatter.ts      # ANSI strip, truncate, code-block wrap
+│   ├── discord.streamer.ts      # Throttled rate-limit-aware message edits
+│   └── stream.manager.ts        # Orchestrates poller → Discord message
 ├── modules/
-│   ├── shell/                 # Shell command execution
-│   ├── claude/                # Claude Code CLI integration
-│   ├── files/                 # File management
-│   └── system/                # System monitoring
-├── db/                        # Drizzle schema, client, repositories
-├── chat/                      # Natural-language router and intent detection
-└── utils/                     # Logger, ANSI stripper, truncator, retry, process exec
+│   ├── module.interface.ts      # BotModule contract
+│   ├── module.loader.ts         # Safe module registration + teardown
+│   ├── shell/                   # /shell commands
+│   ├── claude/                  # /claude commands + hook bridge
+│   ├── files/                   # /file commands
+│   └── system/                  # /system commands
+├── db/
+│   ├── schema.ts                # Drizzle table definitions
+│   ├── client.ts                # bun:sqlite singleton + inline migrations
+│   └── repositories/            # session / command / stream repos
+├── chat/                        # Natural-language intent routing
+└── utils/                       # logger, ansi, truncate, retry, process exec
+tests/
+└── unit/                        # 27 unit tests across guards, streaming, tmux, utils
 ```
