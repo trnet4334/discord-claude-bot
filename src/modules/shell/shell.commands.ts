@@ -75,13 +75,21 @@ async function handleShellRun(
   const dangerCheck = checkDangerous(command)
 
   if (dangerCheck.isDangerous) {
+    // Destructive: red ⚠️ confirmation
     const confirmed = await requireConfirmation(
       interaction,
       `**Command:** \`${command}\`\n**Matched pattern:** \`${dangerCheck.matchedPattern}\``,
+      'dangerous',
     )
     if (!confirmed) return
   } else {
-    await interaction.deferReply()
+    // Write-level: blue 📝 confirmation for all shell executions
+    const confirmed = await requireConfirmation(
+      interaction,
+      `**Command:** \`${command}\``,
+      'write',
+    )
+    if (!confirmed) return
   }
 
   const startedAt = Date.now()

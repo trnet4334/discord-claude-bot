@@ -12,21 +12,45 @@ import { DISCORD } from '../config/constants.ts'
 const logger = getLogger()
 
 /**
- * Shows a Discord Button confirmation dialog for dangerous operations.
- * Returns true if the user confirmed, false if they cancelled or it timed out.
+ * write   — blue Primary button, 📝 header (file writes, all shell runs)
+ * dangerous — red Danger button, ⚠️ header (file delete, dangerous shell patterns)
+ */
+export type ConfirmationSeverity = 'write' | 'dangerous'
+
+const SEVERITY_CONFIG = {
+  write: {
+    header: '📝 **Confirm write operation**',
+    confirmLabel: 'Proceed',
+    confirmStyle: ButtonStyle.Primary,
+  },
+  dangerous: {
+    header: '⚠️ **Dangerous operation** — are you sure?',
+    confirmLabel: 'Confirm',
+    confirmStyle: ButtonStyle.Danger,
+  },
+} as const
+
+/**
+ * Shows a Discord Button confirmation dialog.
+ * Returns true if the user confirmed, false if cancelled or timed out.
+ *
+ * @param severity 'write' for write-level ops, 'dangerous' for destructive ops
  */
 export async function requireConfirmation(
   interaction: ChatInputCommandInteraction,
   prompt: string,
+  severity: ConfirmationSeverity = 'dangerous',
 ): Promise<boolean> {
-  const confirmId = `confirm-${Date.now()}`
-  const cancelId = `cancel-${Date.now()}`
+  const ts = Date.now()
+  const confirmId = `confirm-${ts}`
+  const cancelId = `cancel-${ts}`
+  const cfg = SEVERITY_CONFIG[severity]
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(confirmId)
-      .setLabel('Confirm')
-      .setStyle(ButtonStyle.Danger),
+      .setLabel(cfg.confirmLabel)
+      .setStyle(cfg.confirmStyle),
     new ButtonBuilder()
       .setCustomId(cancelId)
       .setLabel('Cancel')
@@ -34,7 +58,7 @@ export async function requireConfirmation(
   )
 
   const reply = await interaction.reply({
-    content: `⚠️ **Dangerous operation** — are you sure?\n\n${prompt}`,
+    content: `${cfg.header}\n\n${prompt}`,
     components: [row],
     ephemeral: true,
   })
@@ -49,18 +73,18 @@ export async function requireConfirmation(
 
     const confirmed = component.customId === confirmId
     await component.update({
-      content: confirmed ? '✅ Confirmed — proceeding.' : '🚫 Cancelled.',
+      content: confirmed ? '✅ Proceeding.' : '🚫 Cancelled.',
       components: [],
     })
 
-    logger.info('Confirmation dialog resolved', { confirmed })
+    logger.info('Confirmation dialog resolved', { severity, confirmed })
     return confirmed
   } catch {
     // Timeout
     await interaction
       .editReply({ content: DISCORD.BUTTON_TIMEOUT_LABEL, components: [] })
       .catch(() => undefined)
-    logger.info('Confirmation dialog timed out')
+    logger.info('Confirmation dialog timed out', { severity })
     return false
   }
 }

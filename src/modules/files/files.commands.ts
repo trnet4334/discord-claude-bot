@@ -104,9 +104,16 @@ async function handleRead(interaction: ChatInputCommandInteraction): Promise<voi
 }
 
 async function handleWrite(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply()
   const inputPath = interaction.options.getString('path', true)
   const content = interaction.options.getString('content', true)
+
+  const preview = content.length > 120 ? content.slice(0, 120) + '…' : content
+  const confirmed = await requireConfirmation(
+    interaction,
+    `**File:** \`${inputPath}\`\n**Size:** ${content.length} chars\n**Preview:** \`\`\`\n${preview}\n\`\`\``,
+    'write',
+  )
+  if (!confirmed) return
 
   try {
     const fullPath = safePath(inputPath)
