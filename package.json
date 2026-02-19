@@ -1,0 +1,28 @@
+{
+  "name": "discord-claude-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for remote control of Claude Code CLI and local machine",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "dev": "bun --watch run src/main.ts",
+    "deploy": "bun run src/bot/deployer.ts",
+    "test": "bun test",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/db/migrate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "drizzle-orm": "^0.44.0",
+    "nanoid": "^5.0.9",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.7.3"
+  }
+}
