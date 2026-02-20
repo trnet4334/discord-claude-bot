@@ -1,6 +1,6 @@
 # Discord Claude Bot
 
-A TypeScript/Bun Discord bot for remotely controlling your local machine — running Claude Code CLI, executing shell commands, managing files, and monitoring system health — all via Discord Slash Commands and natural-language messages.
+A TypeScript/Bun bot for remotely controlling your local machine — running Claude Code CLI, executing shell commands, managing files, monitoring system health, and automating a headless browser — via **Discord Slash Commands**, **Telegram commands**, and natural-language messages.
 
 ## Features
 
@@ -8,9 +8,11 @@ A TypeScript/Bun Discord bot for remotely controlling your local machine — run
 - **Shell execution** — run commands with live streaming output (tmux-backed)
 - **File management** — read, write, list, and delete files within a configurable work directory
 - **System monitoring** — CPU, memory, disk, and process snapshots (macOS)
-- **Three-tier permission model** — read ops run immediately; write ops require a blue confirmation button; destructive ops require a red warning confirmation
+- **Browser automation** — open URLs, click elements, type text, capture screenshots (Playwright headless)
+- **Telegram interface** — full command parity with Discord via Telegram bot (optional)
+- **Three-tier permission model** — read ops run immediately; write ops require confirmation; destructive ops require a second warning
 - **Session persistence** — tmux sessions survive bot restarts; automatic reconciliation on startup
-- **Single-owner access control** — all interactions gated by a configured Discord User ID
+- **Single-owner access control** — all interactions gated by your configured Discord User ID / Telegram Chat ID
 
 ## Tech Stack
 
@@ -18,6 +20,8 @@ A TypeScript/Bun Discord bot for remotely controlling your local machine — run
 |-------|-----------|
 | Runtime | [Bun](https://bun.sh) |
 | Discord | discord.js v14 |
+| Telegram | Telegraf v4 |
+| Browser | Playwright (Chromium headless) |
 | Database | bun:sqlite + Drizzle ORM |
 | Validation | Zod |
 | Sessions | tmux |
@@ -31,6 +35,7 @@ A TypeScript/Bun Discord bot for remotely controlling your local machine — run
 - tmux — `brew install tmux`
 - Claude Code CLI — `npm install -g @anthropic-ai/claude-code` (authenticated)
 - A Discord bot with **Message Content Intent** enabled ([discord.com/developers](https://discord.com/developers/applications))
+- *(Optional)* A Telegram bot token from [@BotFather](https://t.me/BotFather)
 
 ### 2. Install
 
@@ -38,6 +43,7 @@ A TypeScript/Bun Discord bot for remotely controlling your local machine — run
 git clone https://github.com/trnet4334/discord-claude-bot.git
 cd discord-claude-bot
 bun install
+bunx playwright install chromium   # for browser automation
 ```
 
 ### 3. Configure
@@ -48,17 +54,19 @@ cp .env.example .env
 
 Edit `.env` with your values:
 
-| Variable | Where to find it |
-|----------|-----------------|
-| `DISCORD_TOKEN` | Developer Portal → Your App → Bot → Token |
-| `DISCORD_APPLICATION_ID` | Developer Portal → General Information → Application ID |
-| `DISCORD_GUILD_ID` | Discord → Right-click your server → Copy Server ID (requires Developer Mode) |
-| `ALLOWED_USER_ID` | Discord → Right-click your username → Copy User ID |
-| `CLAUDE_WORK_DIR` | Absolute path to your working directory (defaults to `$HOME`) |
+| Variable | Required | Where to find it |
+|----------|----------|-----------------|
+| `DISCORD_TOKEN` | Yes | Developer Portal → Your App → Bot → Token |
+| `DISCORD_APPLICATION_ID` | Yes | Developer Portal → General Information → Application ID |
+| `DISCORD_GUILD_ID` | Yes | Discord → Right-click your server → Copy Server ID |
+| `ALLOWED_USER_ID` | Yes | Discord → Right-click your username → Copy User ID |
+| `CLAUDE_WORK_DIR` | No | Absolute path to working directory (defaults to `$HOME`) |
+| `TELEGRAM_BOT_TOKEN` | No | @BotFather → /newbot → token |
+| `TELEGRAM_ALLOWED_CHAT_ID` | No | Your Telegram user/chat ID (bot ignores all others) |
 
 ### 4. Deploy Slash Commands
 
-Run once to register commands with your guild:
+Run once to register Discord slash commands with your guild:
 
 ```bash
 bun run deploy
@@ -81,12 +89,14 @@ A successful startup looks like:
 {"message":"Module loaded","meta":{"name":"claude"}}
 {"message":"Module loaded","meta":{"name":"files"}}
 {"message":"Module loaded","meta":{"name":"system"}}
+{"message":"Module loaded","meta":{"name":"browser"}}
 {"message":"Slash commands deployed successfully"}
+{"message":"Telegram bot started (long-polling)"}
 ```
 
 ---
 
-## Commands
+## Discord Commands
 
 ### `/claude` — Claude Code Sessions
 
@@ -127,35 +137,78 @@ All paths are relative to `CLAUDE_WORK_DIR`. Path traversal attempts are blocked
 | `/system df` | Disk usage |
 | `/system top` | CPU and memory snapshot |
 
+### `/browser` — Browser Automation
+
+Each subcommand returns a screenshot of the current browser state.
+
+| Subcommand | Description |
+|-----------|-------------|
+| `/browser open <url>` | Navigate to a URL |
+| `/browser click <selector>` | Click a CSS selector |
+| `/browser type <selector> <text>` | Fill an input field |
+| `/browser screenshot` | Capture current state |
+| `/browser close` | Close the browser session |
+
+---
+
+## Telegram Commands
+
+Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALLOWED_CHAT_ID` in `.env` to enable. The Telegram bot shares the same tmux sessions and database as Discord.
+
+Send `/start` to see the full command list. Key commands:
+
+| Command | Description |
+|---------|-------------|
+| `/shell <cmd>` | Run a shell command (inline keyboard confirmation) |
+| `/shell_history [limit]` | Recent command history |
+| `/claude_start` | Start a Claude Code session |
+| `/claude_send <message>` | Send to active Claude session |
+| `/claude_stop` | Stop active session |
+| `/claude_status` | List sessions |
+| `/claude_attach` | Get `tmux attach` command |
+| `/file_read <path>` | Read a file |
+| `/file_write <path> <content>` | Write a file (confirmation required) |
+| `/file_list [path]` | List directory |
+| `/file_delete <path>` | Delete a file (destructive confirmation) |
+| `/system_status` | System overview |
+| `/system_ps [count]` | Top processes |
+| `/system_df` | Disk usage |
+| `/system_top` | CPU snapshot |
+| `/browser_open <url>` | Open URL, returns screenshot |
+| `/browser_click <selector>` | Click element, returns screenshot |
+| `/browser_type <selector> <text>` | Fill input, returns screenshot |
+| `/browser_shot` | Current screenshot |
+| `/browser_close` | Close browser session |
+
 ---
 
 ## Permission Model
 
 Every operation falls into one of three tiers:
 
-| Tier | Operations | Dialog |
-|------|-----------|--------|
+| Tier | Operations | Confirmation |
+|------|-----------|--------------|
 | **Read** | `system *`, `file read`, `file list`, `shell history`, `claude status` | None — executes immediately |
-| **Write** | `shell run` (safe commands), `file write` | 📝 Blue **Proceed** button |
-| **Destructive** | `shell run` (dangerous patterns), `file delete` | ⚠️ Red **Confirm** button |
+| **Write** | `shell run` (safe commands), `file write`, `file write` via Telegram | Discord: 📝 Blue button · Telegram: ✅ inline keyboard |
+| **Destructive** | `shell run` (dangerous patterns), `file delete` | Discord: ⚠️ Red button · Telegram: ⚠️ inline keyboard |
 
-Dangerous shell patterns (rm -rf, dd, mkfs, drop database, etc.) are detected by regex and automatically escalated to the destructive tier regardless of intent.
+Dangerous shell patterns (`rm -rf`, `dd`, `mkfs`, `DROP DATABASE`, etc.) are detected by regex and automatically escalated to the destructive tier.
 
 ---
 
 ## Architecture
 
 ```
-Discord ──► AuthGuard (User ID check)
+Discord ──► AuthGuard (User ID check)          Telegram ──► TelegramAuth (Chat ID check)
+               │                                                │
+               ▼                                                ▼
+           BotRouter ──► SlashCommandHandler         TelegramBot (Telegraf)
+                               │                               │
+               ┌───────────────┴───────────────────────────────┘
                │
-               ▼
-           BotRouter ──► SlashCommandHandler / ChatHandler
-                               │
-               ┌───────────────┤
-               │               │
-         ConfirmationGuard   DB (SQLite / Drizzle)
-         (write / dangerous)   │
-               │           SessionRepo / CommandRepo
+         ConfirmationGuard ──── DB (SQLite / Drizzle)
+         (write / dangerous)         │
+               │               SessionRepo / CommandRepo / BrowserRepo
                ▼
           TmuxAdapter
           SessionManager ──► reconcile on startup
@@ -163,8 +216,13 @@ Discord ──► AuthGuard (User ID check)
           TmuxPoller (1500ms capture-pane)
                │
           DiscordStreamer (debounced edits, rate-limit aware)
+          TelegramStreamer (1200ms debounce, editMessageText)
                │
-          Discord Message (live updates)
+          Live message updates (Discord edit / Telegram edit)
+
+          BrowserService (Playwright chromium)
+               │
+          Screenshots returned as Buffer → Discord attachment / Telegram photo
 ```
 
 ### Module System
@@ -198,8 +256,8 @@ tmux pane output
   └─► capture-pane every 1500ms
       └─► diff new lines
           └─► stripAnsi → truncate to 1800 chars
-              └─► debounce 500ms
-                  └─► discord.message.edit() (max 4/sec)
+              └─► debounce 500ms (Discord) / 1200ms (Telegram)
+                  └─► message.edit() — rate-limit aware
 ```
 
 ---
@@ -244,10 +302,21 @@ src/
 │   ├── claude/                  # /claude commands + hook bridge
 │   ├── files/                   # /file commands
 │   └── system/                  # /system commands
+├── browser/
+│   ├── browser.service.ts       # Playwright chromium, per-session Page map
+│   ├── browser.module.ts        # BotModule wrapping BrowserService
+│   ├── browser.commands.ts      # /browser slash commands → screenshot attachment
+│   └── browser.session.ts       # In-memory session store
+├── telegram/
+│   ├── telegram.bot.ts          # Telegraf factory — all commands wired
+│   ├── telegram.auth.ts         # Chat ID enforcement
+│   ├── telegram.confirm.ts      # Inline keyboard confirmation
+│   ├── telegram.streamer.ts     # Debounced editMessageText
+│   └── handlers/                # shell / claude / files / system / browser
 ├── db/
 │   ├── schema.ts                # Drizzle table definitions
 │   ├── client.ts                # bun:sqlite singleton + inline migrations
-│   └── repositories/            # session / command / stream repos
+│   └── repositories/            # session / command / stream / browser repos
 ├── chat/                        # Natural-language intent routing
 └── utils/                       # logger, ansi, truncate, retry, process exec
 tests/
