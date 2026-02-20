@@ -14,6 +14,8 @@ import { ShellModule } from './modules/shell/shell.module.ts'
 import { ClaudeModule } from './modules/claude/claude.module.ts'
 import { FilesModule } from './modules/files/files.module.ts'
 import { SystemModule } from './modules/system/system.module.ts'
+import { BrowserModule } from './browser/browser.module.ts'
+import { createTelegramBot, startTelegramBot, stopTelegramBot } from './telegram/telegram.bot.ts'
 import { Events } from 'discord.js'
 import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -42,12 +44,27 @@ const streamManager = new StreamManager(poller)
 await sessionManager.reconcile()
 
 // Build modules
+const claudeModule = new ClaudeModule(sessionManager, streamManager, adapter)
+const browserModule = new BrowserModule()
 const modules = [
   new ShellModule(sessionManager, streamManager),
-  new ClaudeModule(sessionManager, streamManager, adapter),
+  claudeModule,
   new FilesModule(),
   new SystemModule(),
+  browserModule,
 ]
+
+// Optional Telegram bot (started after Discord is ready)
+const telegramBotInstance =
+  env.TELEGRAM_BOT_TOKEN !== undefined && env.TELEGRAM_ALLOWED_CHAT_ID !== undefined
+    ? createTelegramBot({
+        token: env.TELEGRAM_BOT_TOKEN,
+        allowedChatId: env.TELEGRAM_ALLOWED_CHAT_ID,
+        sessionManager,
+        sessionStore: claudeModule.sessionStore,
+        browserService: browserModule.browserService,
+      })
+    : null
 
 // Build registry and Discord client
 const registry = new BotRegistry()
@@ -70,6 +87,11 @@ client.once(Events.ClientReady, async (readyClient: { user: { tag: string } }) =
       error: error instanceof Error ? error.message : String(error),
     })
   }
+
+  // Start Telegram bot if configured
+  if (telegramBotInstance !== null) {
+    await startTelegramBot(telegramBotInstance)
+  }
 })
 
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
@@ -78,6 +100,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal} — shutting down`)
   streamManager.stopAll()
   poller.stopAll()
+  if (telegramBotInstance !== null) stopTelegramBot(telegramBotInstance)
   await unloadModules(modules)
   client.destroy()
   logger.info('Shutdown complete')

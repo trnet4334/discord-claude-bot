@@ -21,13 +21,13 @@ export function createBrowserCommands(browserService: BrowserService): ReadonlyA
     return sessionId
   }
 
-  function sendScreenshot(
+  async function sendScreenshot(
     interaction: ChatInputCommandInteraction,
     screenshot: Buffer,
     label: string,
   ): Promise<void> {
     const attachment = new AttachmentBuilder(screenshot, { name: 'screenshot.png' })
-    return interaction.editReply({ content: label, files: [attachment] })
+    await interaction.editReply({ content: label, files: [attachment] })
   }
 
   return [

@@ -12,7 +12,7 @@ export class BrowserModule implements BotModule {
   readonly chatHandlers: ReadonlyArray<ChatHandlerDef> = []
   readonly slashCommands: ReadonlyArray<SlashCommandDef>
 
-  private readonly browserService: BrowserService
+  readonly browserService: BrowserService
 
   constructor() {
     this.browserService = new BrowserService()

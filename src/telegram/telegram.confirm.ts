@@ -38,11 +38,11 @@ export function registerConfirmationHandlers(bot: Telegraf): void {
     const confirmed = data.startsWith('confirm-')
     await ctx.answerCbQuery(confirmed ? '✅ Proceeding' : '🚫 Cancelled')
     try {
-      const originalText = ctx.callbackQuery.message
-        ? 'text' in ctx.callbackQuery.message
-          ? ctx.callbackQuery.message.text
+      const cbq = ctx.callbackQuery
+      const originalText =
+        cbq !== undefined && cbq.message !== undefined && 'text' in cbq.message
+          ? cbq.message.text
           : ''
-        : ''
       await ctx.editMessageText(
         `${originalText}\n\n${confirmed ? '✅ Proceeding...' : '🚫 Cancelled.'}`,
         { parse_mode: 'Markdown' },

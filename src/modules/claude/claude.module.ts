@@ -15,14 +15,14 @@ export class ClaudeModule implements BotModule {
   readonly description = 'Manage Claude Code CLI sessions via tmux'
   readonly chatHandlers: ReadonlyArray<ChatHandlerDef> = []
   readonly slashCommands: ReadonlyArray<SlashCommandDef>
-  private readonly store = new ClaudeSessionStore()
+  readonly sessionStore = new ClaudeSessionStore()
 
   constructor(
     sessionManager: SessionManager,
     streamManager: StreamManager,
     private readonly adapter: TmuxAdapter,
   ) {
-    this.slashCommands = createClaudeCommands(sessionManager, streamManager, this.store)
+    this.slashCommands = createClaudeCommands(sessionManager, streamManager, this.sessionStore)
   }
 
   async initialize(_client: Client): Promise<void> {
@@ -33,7 +33,7 @@ export class ClaudeModule implements BotModule {
     for (const dbSession of claudeSessions) {
       const alive = await this.adapter.hasSession(dbSession.name)
       if (alive) {
-        this.store.set(dbSession.id, {
+        this.sessionStore.set(dbSession.id, {
           dbSession,
           status: 'ready',
           lastActivityAt: dbSession.lastSeenAt ?? new Date(),
