@@ -79,11 +79,12 @@ export function createBrowserCommands(browserService: BrowserService): ReadonlyA
           if (sub === 'open') {
             const url = interaction.options.getString('url', true)
             // Create or reuse session
-            let sessionId = userSessions.get(userId)
-            if (sessionId === undefined || !browserService.hasSession(sessionId)) {
-              sessionId = await browserService.createSession()
-              userSessions.set(userId, sessionId)
-            }
+            const existing = userSessions.get(userId)
+            const sessionId: string =
+              existing !== undefined && browserService.hasSession(existing)
+                ? existing
+                : await browserService.createSession()
+            userSessions.set(userId, sessionId)
             const shot = await browserService.navigate(sessionId, url)
             logger.info('Browser navigated', { sessionId, url })
             await sendScreenshot(interaction, shot, `🌐 Navigated to \`${url}\``)
