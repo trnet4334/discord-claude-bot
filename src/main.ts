@@ -90,7 +90,7 @@ client.once(Events.ClientReady, async (readyClient: { user: { tag: string } }) =
 
   // Start Telegram bot if configured
   if (telegramBotInstance !== null) {
-    await startTelegramBot(telegramBotInstance)
+    startTelegramBot(telegramBotInstance)
   }
 })
 

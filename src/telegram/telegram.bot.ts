@@ -243,8 +243,14 @@ export function createTelegramBot(config: TelegramBotConfig): Telegraf {
   return bot
 }
 
-export async function startTelegramBot(bot: Telegraf): Promise<void> {
-  await bot.launch()
+export function startTelegramBot(bot: Telegraf): void {
+  // bot.launch() resolves only when the bot stops — fire and forget the loop,
+  // surface any launch errors via the logger.
+  bot.launch().catch((error) => {
+    logger.error('Telegram bot error', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
   logger.info('Telegram bot started (long-polling)')
 }
 
