@@ -18,6 +18,8 @@
     "discord.js": "^14.16.3",
     "drizzle-orm": "^0.44.0",
     "nanoid": "^5.0.9",
+    "playwright": "^1.58.2",
+    "telegraf": "^4.16.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {

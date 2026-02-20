@@ -12,6 +12,9 @@ const EnvSchema = z.object({
   STREAM_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(1500),
   STREAM_EDIT_DEBOUNCE_MS: z.coerce.number().int().positive().default(500),
   DANGEROUS_CMD_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  // Telegram (optional — bot not started if absent)
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_ALLOWED_CHAT_ID: z.string().min(1).optional(),
 })
 
 export type Env = z.infer<typeof EnvSchema>
@@ -20,7 +23,7 @@ function parseEnv(): Env {
   const result = EnvSchema.safeParse(process.env)
   if (!result.success) {
     const formatted = result.error.issues
-      .map((issue) => `  • ${issue.path.join('.')}: ${issue.message}`)
+      .map((issue: z.ZodIssue) => `  • ${issue.path.join('.')}: ${issue.message}`)
       .join('\n')
     throw new Error(`Environment validation failed:\n${formatted}`)
   }

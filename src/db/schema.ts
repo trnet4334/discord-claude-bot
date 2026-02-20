@@ -32,9 +32,19 @@ export const activeStreams = sqliteTable('active_streams', {
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
 })
 
+export const browserSessions = sqliteTable('browser_sessions', {
+  id: text('id').primaryKey(),
+  status: text('status', { enum: ['active', 'closed'] }).notNull().default('active'),
+  url: text('url'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  lastActiveAt: integer('last_active_at', { mode: 'timestamp' }),
+})
+
 export type TmuxSession = typeof tmuxSessions.$inferSelect
 export type NewTmuxSession = typeof tmuxSessions.$inferInsert
 export type CommandHistory = typeof commandHistory.$inferSelect
 export type NewCommandHistory = typeof commandHistory.$inferInsert
 export type ActiveStream = typeof activeStreams.$inferSelect
 export type NewActiveStream = typeof activeStreams.$inferInsert
+export type BrowserSession = typeof browserSessions.$inferSelect
+export type NewBrowserSession = typeof browserSessions.$inferInsert

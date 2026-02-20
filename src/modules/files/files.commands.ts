@@ -17,7 +17,7 @@ const logger = getLogger()
 /**
  * Validates that a path is within the allowed work directory (path traversal protection).
  */
-function safePath(inputPath: string): string {
+export function safePath(inputPath: string): string {
   const base = resolve(env.CLAUDE_WORK_DIR)
   const resolved = resolve(base, inputPath)
   if (!resolved.startsWith(base + '/') && resolved !== base) {

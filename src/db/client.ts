@@ -68,6 +68,14 @@ export function runMigrations(db: AppDb): void {
       last_edited_at INTEGER,
       is_active INTEGER NOT NULL DEFAULT 1
     );
+
+    CREATE TABLE IF NOT EXISTS browser_sessions (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'closed')),
+      url TEXT,
+      created_at INTEGER NOT NULL,
+      last_active_at INTEGER
+    );
   `)
 
   logger.info('Database migrations applied')
